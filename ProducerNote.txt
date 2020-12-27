@@ -1,0 +1,300 @@
+开发笔记 Created in Feb 2020
+Xavier Gao 
+
+# 环境搭建
+   SIM，下有需调试的代码，fssim和fsd_common_msgs
+   bitfsd2019 or BITFSD2020 build 根据报错添加对应包的fsd_common_msgs依赖
+   找不到的***config.cmake会在build下面 所以不clean 连续build两次应该就可以
+# 运行仿真 
+   source ~/ROS/SIM/devel/setup.bash
+   launch fssim auto+tab # 启动fssim rviz界面，注意这里启动的是SIM的仿真，地图等配置在SIM里
+   source ~/ROS/bitfsd2019/fsd_environment.sh
+   launch fssim_interface only+tab # 启动仿真接口only;如果想同时启动仿真和接口，roslaunch fssim_interface fssim，这里启动的是2019 or 2020里的仿真
+   launch 想跑的程序对应的launch
+   平时重新仿真所有节点都重开 只重开rviz和要跑的launch不可
+
+
+# 常见问题
+# 1. build找不到msg或是.h相关文件  ： 再build一次
+
+# 2. 跨包message：pub_pkg，msg定义在其中，CMakelist find_package(...message_generation;
+                                                  add_message_files(FILES...xxx.msg;
+                                                  generate_messages( DEPENDENCIES std_msgs;
+                                                  catkin_package( CATKIN_DEPENDS message_runtime roscpp rospy;
+                                                  if Cpp:
+                                                  add_executable(publisher_node src/publisher.cpp)
+                                                  add_dependencies(publisher_node ${PROJECT_NAME}_generate_messages_cpp)  ##作用待学习 
+                                                  target_link_libraries(publisher_node ${catkin_LIBRARIES} )
+                                     package.xml  <build_depend>message_generation</build_depend>
+                                                  <exec_depend>message_runtime</exec_depend>
+
+                 sub_pkg,              CMakeList  find_package( ... pub_pkg;
+                                                  if Cpp:
+                                                  add_executable(subscriber_node src/subscriber.cpp)
+                                                  add_dependencies(subscriber_node ${PROJECT_NAME}_message_generation_cpp)
+                                                  target_link_libraries(subscriber_node ${catkin_LIBRARIES})
+                                     package.xml  <build_depend>pub_pkg</build_depend>
+                                                  <exec_depend>pub_pkg</exec_depend>
+             *具体详见cross_package_pub/sub
+# 3. 跨包service：client_pkg, srv定义其中，CMakeList find_package(...message_generation;                                    ##std_msgs干嘛的？为什么不用找
+                                                   add_service_files(FILES Person.srv)
+                                                   generate_messages(DEPENDENCIES std_msgs)
+                                                   catkin_package( CATKIN_DEPENDS ... message_runtime roscpp rospy;
+                                                   if Cpp:
+                                                   add_executable(person_client src/person_server.cpp)
+                                                   可能要 add_dependencies(person_client ${PROJECT_NAME}_generate_messages_cpp)
+                                                   target_link_libraries(person_client ${catkin_LIBRARIES} )
+                                       package.xml <build_depend>message_generation</build_depend>
+                                                   <exec_depend>message_runtime</exec_depend>
+                                                   
+
+                server_pkg             CMakeList   find_package( ... client_pkg;
+                                                  if Cpp:
+                                                  add_executable(person_server src/subscriber.cpp)
+                                                  可能要 add_dependencies(person_server ${PROJECT_NAME}_message_generation_cpp)
+                                                  target_link_libraries(person_server ${catkin_LIBRARIES})
+                                      package.xml <build_depend>client_pkg</build_depend>
+                                                  <exec_depend>client_pkg</exec_depend>
+                                                  如果用了common_msgs的话
+                                                  无论是谁，xml里都要添加<build_depend>geometry_msgs</build_depend>
+                                                                        <build_export_depend>geometry_msgs</build_export_depend>
+                                                                        <exec_depend>geometry_msgs</exec_depend>
+
+总体来讲顺序：srv/msg/→server→client→txt→xml
+
+# 4. cout别的 会把之前ROS_INFO缓冲区的全都输出
+
+
+# 5. withdraw blacklisted pkg -->delete ws/.catkin_tools, build again
+
+# 6. python切换：采用update-alternatives 切换版本
+
+     1.打开终端：Ctrl+Alt+T
+     2.查看update-alternatives的帮助信息：update-alternatives --help
+     3.查看有没有python可选项：update-alternatives --display python
+     4.如果没有，输入下面的命令建立python可选项
+
+  sudo update-alternatives --install /usr/bin/python python /usr/bin/python2.7 2
+  sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.5 1
+     5.切换python版本：sudo update-alternatives --config python 
+       不写sudo,运行会出现莫名其妙的SyntaxError: invalid syntax
+
+# 7. 下载需要的python插件 pip3 install xxx==0.0(版本) -i https://pypi.douban.com/simple or https://pypi.tuna.tsinghua.edu.cn/simple
+      ubuntu更新: 华为：http://mirrors.huaweicloud.com/repository/ubuntu-releases/
+                  阿里云：http://mirrors.aliyun.com/ubuntu-releases/
+
+
+# 8. 使用ros::package::getPath("") 需要#include <ros/package.h>, find_package(catkin REQUIRED COMPONENTS ... roslib),     add_executable(main ./src/main.cpp), target_link_libraries(main ${catkin_LIBRARIES})
+
+# 9. 读入文件参照mpc离线
+
+# 10. 为什么?同一个workspace在桌面可以编译通过 在新建文件夹中却不行???
+
+# 11. 用CLion启动OpenCV
+	cmake_minimum_required(VERSION 2.8.3)
+	project(test1pkg)
+
+	#核心
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+	set (OpenCV_DIR ~/Downloads/opencv/4.3.0/opencv-4.3.0/build)
+	set(SOURCE_FILES src/main.cpp)
+
+	#找就完事了
+	find_package(catkin REQUIRED COMPONENTS
+  	roscpp
+  	rospy
+	...
+  	OpenCV REQUIRED
+	)
+
+	#自带的
+	catkin_package(
+	#  INCLUDE_DIRS include
+	#  LIBRARIES test1pkg
+	#  CATKIN_DEPENDS roscpp rospy
+	#  DEPENDS system_lib
+	)
+
+	# include
+	include_directories(
+        ${catkin_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS}
+	)
+
+	#生成可执行文件, 以及对应目标工程的依赖库,注意target_link_libraries()第一个变量是target
+	add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+	target_link_libraries( ${PROJECT_NAME}
+        ${catkin_LIBRARIES}
+        ${OpenCV_LIBS}
+	)
+	
+	要是直接opencv的project而不是ros包,则只需要在CLion new project之后自动生成的CMakeList添加:
+	find_package(OpenCV REQUIRED)
+	target_link_libraries( ${PROJECT_NAME} ${OpenCV_LIBS})
+	
+	原理 https://zhuanlan.zhihu.com/p/50829542
+
+# 12. apt-get install 不行的时候,试试apt install
+
+# 13. 当终端运行shell从外网上下载东西下不动时,看看sh如何实现的,可以先自己下载,改成sh里面用的名字,再把sh 里的相关函数内容注释掉
+
+# 14. 当某网站打不开,走代理还是打不开,可能不是被墙了,而是网站IP的玄学问题 $ sudo gedit /etc/hosts ,末尾添加 151.101.84.133  raw.githubusercontent.com, 至于IP咋来的 自己查
+
+# 15. 遇到神奇的找不到gazebo之类的, 可以重装ros https://www.hotbak.net/key/AgainbyXuZhimoweixin34117211%E7%9A%84%E5%8D%9A%E5%AE%A2CSDN%E5%8D%9A%E5%AE%A2.html
+
+# 16. permission denied  可能就是权限不行 或者没有那个文件 刚刚sudo rosdep update过不行,然后不带sudo又update了一下就可以了
+
+# 17. ubuntu下cpu默认运行在节能模式下,会比较慢，通过如下方式进行调整 
+	1、安装cpufrequtils: sudo apt-get install cpufrequtils
+	2、查看当前cpu的状态： cpufreq-info
+	3、把cpu调整到性能模式： sudo cpufreq-set -g performance
+
+# 18. 关于find_package. 这个有很多复杂的讲究,总的来说就是,
+           ①Module模式:寻找${CMAKE_MODULE_PATH},默认为空(需要在cmakelist里自己设置),然后找cmake自己的安装路径打开,即<CMAKE_ROOT>(如usr/local/share/cmake-3.17)/Modules;在这里面寻找FindXXX.cmake
+      如果也没有则进入
+           ②Config模式,先寻找CMAKE_PREFIX_PATH(默认为opt/ros/kinetic)下的每一个目录(里面包括一个catkinConfig.cmake就是用来找自己工作空间里面的.cmake的),
+      然后再找usr(/local)/share/xxx/cmake/xxxConfig.cmake或xxx-config.cmake, 和usr(/local)/lib/cmake/xxx/xxxConfig.cmake或xxx-config.cmake                                                       
+      在这里找的是xxxConfig.cmake或xxx-config.cmake,这两者是find_package在Module模式找不到时假定库会安装的文件,但是大部分库都会安装FindXXX.cmake通过module模式找到,而不会安装Config.cmake通过config模式找到
+
+      然后就可以.cmake里面定义下面这些变量：
+
+	<NAME>_FOUND
+	<NAME>_INCLUDE_DIRS or <NAME>_INCLUDES
+	<NAME>_LIBRARIES or <NAME>_LIBRARIES or <NAME>_LIBS
+	<NAME>_DEFINITIONS
+
+      如果找到这个包，则可以通过在工程的顶层目录中的CMakeLists.txt 文件添加 include_directories(<NAME>_INCLUDE_DIRS) 来包含库的头文件，
+      添加target_link_libraries(源文件 <NAME>_LIBRARIES)命令将源文件与库文件链接起来。
+      
+      
+
+# 19. 我们安装[源码包],两个方法.①直接apt install等等,终端完事,这样的会以usr为安装目录,bin下面是可执行文件,include下面头文件,share下面是共享数据,...(省略我记不住,google之)
+                                                       ②通过github等网站下载tar.gz之类的压缩包,然后解压,打开解压后的文件夹,新建build,cmake ..,make,最后make install完成安装.
+				这样的就会安装在usr/local下面,逻辑跟刚才一样,不同在于这些是手动安装.这样安装完成之后;理论上可以直接被find_package找到
+
+# 20. 显示当前运行节点:调出终端,rqt_graph回车
+
+# 21. python抽风,莫名其妙数组越界,可能是因为别的地方写错了(好几处),但是我改了一处,剩下的他就不报了,改报一个莫名其妙的l[1]越界之类的. 比如,我让一个list['s:','2','3','4','\n']转化成float in range(1,len-1),
+      但是后边写成(1,len)了,就会在print(list[1])说IndexError越界. 造成这种可能是因为忘了\n或者是split(' '),但是不能连跳多个空格
+
+# 22. 一般报与数组越界有关的错,还搜不到的时候,可能是自己写的wheel里面自己定义的roserror,搜本地工程看一下是什么判断条件会eg:throw std::invalid_argument("received value out of the pre-defined range");
+
+# 23. 除以0,根号负数返回-nan,所以产生-nan找哪里分母=0(如dx)或是sqrt(增量,却是负的)之类的
+
+# 24. 关于vector和list ①只能pushback不能一上来就vec[0]; ②注意它只增不减的性质,如果是一个循环多一个元素的vec_1可以循环外定义变量,即pkg所属类的成员,但如果是每次循环都重新算一遍的vec_2,则须用局部变量,在主循环内定义
+
+# 25. py和matlab交互,参考plt.py, 注意参数格式,py给matlab的数字必须是1.0的interger而不是1
+
+# 26. file not recognized: File truncated错误：这种错误一般是编译数据被截断或则编译过程中发生异常退出系统导致数据丢失; catkin clean再build即可
+
+# 27. rqt_graph bitfsd的某节点很孤单,可能是interface启动太久了,自己挂了(i don't know why)
+
+# 28. 如果想看话题收发,rqt_graph,如果只发不收,rostopic echo /嘻嘻嘻_哈哈哈
+
+# 29. 程序里用到它需要现在最原始的,h里面 #include "std_msgs/Float64MultiArray.h"
+
+# 30. git status # git add . # git commit -m "Description" # git push origin local_branch_name:remote_branch_name # git reset
+
+# 31. 已存在节点新增话题订阅和发布
+		yaml:		xxx_topic_name:(eg:)/slam/state		
+		?handle.h:	std::string xxx_topic_name_;
+				ros::NodeHandle nodeHandle_;/ros::Subscriber refPathSubscriber_;/ros::Publisher xxxPublisher_;
+				Callback(const fsd_common_msgs::Map &msgs)/public: void SendMsg()/public: void loadParameters()/public: void subscribeToTopics()/public: void SubscribeToTopics()
+				[只有构造,getNoderate,load,pub,sub,run,send是public]
+		?handle.cpp:	loadParameters() {
+							if (!nodeHandle_.param<std::string>("track_topic_name", track_topic_name_,"/global_path")) 
+							{ROS_WARN_STREAM("Did not load map_topic_name. Standard value is: " << track_topic_name_"}}
+				publishToTopics() {
+							ROS_INFO("publish to topics");
+  							mpcStatePublisher_ = nodeHandle_.advertise<fsd_common_msgs::ControlCommand>(
+      							ctrl_cmd_topic_name_, 1);}
+				subscribeToTopics() {
+							ROS_INFO("subscribe to topics");
+							xxxxSubscriber_ = nodeHandle_.subscribe(xxx_topic_name_,1,&classname::xxxCallback(),this);}
+				xxxCallback(const xxx_msgs::Map &msgs) {mpc_.setMap(msg);}
+				主循环后SendMsg() {mpcStatePublisher_.publish(mpc_.getCtrlCmd());}
+		?.h(别人都include它,它#include "std_msgs/Float64MultiArray.h"):		
+				data_;eg:nav_msgs::Path path_;
+				public: void setMap(fsd_common_msgs::Map msgs);/public: fsd_common_msgs::ControlCommand getCmd();  [只有set get runAlgorithm是public]
+		?.cpp		构造函数:①调用param.h里的getParam()函数, 完成诸如结构体成员weight_n.x = nh.param("weight_n/x", 50);的操作
+					 ②判断模式 solver_ = xxx_solver_(都是成员)
+				setMap(fsd_common_msgs::Map msgs) {map_ = std::move(msg);}
+				getCmd(){return cmd_;}
+				runAlgorithm(){先走init 执行功能类里面的初始化函数,然后is_init_=1,然后循环节代码,最后可视化}
+# 32. 对于之前存在过的包(当时终端下载)更新为手动下载,或是有些包可能是手动可能是终端下载,不同人写的cmakelist会include不同,
+      可以考虑把sudo cp -r /usr/local/include/${PACKAGE_NAME} /usr/include;反之亦然,别的文件不用管,只保证头文件能找到就行
+
+# 33. pcl_viewer ~/Desktop/.../xxx.pcd
+
+# 34. gazebo --version查看安装版本
+
+# 35. sudo updatedb; locate 要找的名字
+
+# 36. 明明安装好了还是找不到依赖/找不到包 rosdep update//更新ROS源代码。这个命令相当于 Linux 使用 sudo apt-get update 来更新系统软件，它的作用就是更新 ROS 系统中的软件包.
+      反正BITFSDsim里面安装了gazebo却没有在该出现的地方(opt/ros/kinetic/share)出现gazebo_ros和gazebo_msgs导致找不到cmake编译报错, 就source了一下update_dependencies.sh 就好了,我认为是rosdep update起了作用
+			
+# 37. .so相关问题
+	①不同于静态库.a,只要编译完了就复制了一份,就不用去找原来的了,.so共享库文件在编译执行的时候都要找,找不到就报错.	
+	②.so分类 我认为可以分为三种
+
+		a.自己在CMakeList里面add_library生成的,如果是单个包mkdir build编译则位于${PACKAGE_NAME}/build/libxxx.so下,如果是用catkin worksapce编译则位于ws/devel
+                  (这时cmakefile之流仍然在build里,只是可执行文件和库文件扔到devel里了)/lib/${PACKAGE_NAME}/libxxx.so
+		b.安装的所谓"系统依赖"(CMakeList中不能find_package(catkin REQUIRED xxx)而只能find_package(xxx REQUIRED),
+                  即ubuntu系统提供给ros的包(库),也就是我们自己安装的那些ceres opencv eigen3之类的,他们的.so在usr/(local/)lib下面
+		c.ros相关依赖,(CMakeList中最好是通过find_package(catkin REQUIRED xxx)来找),在opt/ros/kinetic/(eg:lib/xxxx.so)
+
+	③所谓安装一些ros功能包依赖,即安装包里一些.so的库文件. 当(可能之前还可以,突然就无故)缺少某些依赖的.so文件时,看一下他们属于哪个ros功能包(可能是一不小心删了),
+          通过如sudo(root) apt-get install(安装) ros(ros功能包)-kinetic(ros对应版本)-gazebo-plugins(gazebo-plugins是包的名字)安装,然后rosdep update
+
+# 38. 同时安装不同版本的包, openCV4安在/usr/local/...下面,find_package(OpenCV REQUIRED)或find_package(OpenCV 4 REQUIRED)均可找到; 
+                           openCV3安在~/OtherVersionPkg/opencv-3.4.11下面,通过set(CMAKE_PREFIX_PATH "~/OtherVersionPkg/opencv-3.4.11")  find_package(OpenCV 3 REQUIRED)找到
+
+# 39. 启用代理除了sudo dpkg -i xxx.deb  electron-ssr 以外,还要进入System Settings/Network/network proxy/然后 Method默认的Automatic不用动, URL:http://127.0.0.1:2333/proxy.pac其中我是http代理,端口12333, 
+                                                    好像启动情况下点击apply system wide可以一键改url. 最后 electron url的bug在于切换模式必须用右键.
+
+# 40. 当莫名其妙执行命令找不到文件(夹)时, 同一终端执行hash -r清空hash缓存
+
+# 41. 当需要用.sh文件下载依赖, 但是error或超时但是没有错误信息时, 希望手动下载. 在.sh文件中找到例如~/Desktop/PX4_SITL/install....sh中的
+	echo "Installing GeographicLib $tool $model"
+	geographiclib-get-$tool $model >/dev/null 2>&1
+      修改为
+	echo "Installing GeographicLib $tool $model by 'geographiclib-get-$tool $model'."
+	geographiclib-get-$tool $model # >/dev/null 2>&1
+      其中echo为了看看可以手动执行的命令, 看看变量每个循环中具体是啥; >/dev/null 2>&1意为上一句命令的1(即标准输出)重定向到usr/balck hole, 
+      然后2(即sh中的错误输出)重定向到&(即等于)1的去向(即那个无底洞, 只写不读, 永不输出).
+
+# 42. 刚下载的包, launch文件未必能直接运行. 需要自己修改里面的变量. 比如我用mavros无法连接px4的SITL, 如果分别启动, 则mavros对应的launch需要
+      roslaunch mavros px4.launch fcu_url:="udp://:14540@127.0.0.1:14557", 但是整体用一个launch文件启动则写成了
+      <arg name="fcu_url" default="udp://:14540@localhost:14557"/>, 这就需要把他改成<arg name="fcu_url" default="udp://:14540@127.0.0.1:14557"/>才能正常连接
+
+# 43. apt-get install --only-upgrade <packagename>
+
+# 44. int8者, std::cout的话,由于<<的重载输出char, 但是本质上还是 int8 a = 5; if(a ==5){...};
+
+# 55. vscode 输入ctrl shift p 搜索setting.json, 不是default的那个,"editor.fontSize": 15, "window.zoomLevel": 1.5修改字号
+
+# 56. rosdep init ERROR: cannot download default sources list from:https://raw.githubusercontent.com/ros/rosdistro/master/rosdep/sources.list.d 
+         website maybe down.之类的挂了梯子也报错的错误解决：挂梯子访问https://raw.githubusercontent.com/ros/rosdistro/master/rosdep/sources.list.d，
+        不出意外打开是个文本，上网上找教程，看看他本来应该下在哪，直接手动新建目录复制过去。如 https://github.com/ElectricalEyes/rosdep-init-and-update-issue
+
+# 57. sudo find -name "clion*"
+         sudo find . -iname "*clion*" 找当前目录，用来查找删除路径未知的配置文件
+
+# 58. vim :set ff回车 查看file format，若.sh文件的是dos则在windows下可执行，在Linux下不可，若需要则:set ff=unix回车:wq回车再执行 
+         --解决.sh的各种不执行和.py的/usr/bin/env: ‘python\r’: No such file or directory一样的操作
+
+# 59. source (=='. ')不用权限，当前shell；bash 不用权限，sub终端；./需要权限，sub终端；对于scripts fork类似bash，exec类似source，但会终止主进程剩余执行
+
+
+
+
+
+
+
+
+
+
+
+
+
+
